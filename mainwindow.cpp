@@ -21,7 +21,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     QVector<QVector3D> points1, points2;
 
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 10000; i++) {
         points1 << QVector3D(n1(generator), n1(generator), n1(generator));
         points2 << QVector3D(n2(generator), n2(generator), n2(generator));
     }

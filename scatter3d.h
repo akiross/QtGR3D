@@ -10,11 +10,13 @@
 #include <QMouseEvent>
 #include <QBasicTimer>
 
+
 struct Entity {
     QColor color;
     QVector<QVector3D> points;
     bool line;
 
+    // Computes max and min coordinates of this entity
     QMatrix3x3 maxmin() const {
         QVector3D min = points[0];
         QVector3D max = points[0];
@@ -36,6 +38,7 @@ struct Entity {
         return m;
     }
 };
+
 
 class Scatter3D : public QOpenGLWidget, protected QOpenGLFunctions_4_3_Core
 {
@@ -70,9 +73,9 @@ private:
     QBasicTimer m_timer;
 
     QVector2D m_mousePressPos;
-//    QMatrix4x4 m_transformMatrix;
     QVector2D m_translation;
-//    QVector2D m_rotation;
+
+    float m_axisLength;
 
     QColor m_axisColor;
     QColor m_bgColor;
@@ -87,7 +90,7 @@ private:
     QMap<const char *, QOpenGLBuffer *> m_vbos;
     QMap<const char *, QOpenGLTexture *> m_textures;
     QMap<const char *, QOpenGLShaderProgram *> m_programs;
-    QMap<const char *, GLint> m_attribs;
+    QMap<const char *, GLuint> m_attribs;
     QMap<const char *, GLint> m_uniforms;
 
 //     *m_vboAxis, *m_vboPoints, *m_vboCurves;

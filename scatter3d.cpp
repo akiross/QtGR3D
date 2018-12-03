@@ -8,16 +8,17 @@
 #include <QLabel>
 
 
+// Using macros to concatenate strings
+#define PROG_TEXT "texture-quad"
+#define PROG_POINTS "pos-col"
+
+
 Scatter3D::Scatter3D(QWidget *parent):
     QOpenGLWidget(parent),
-//    m_rotation(0, 0),
     m_nVertices(0)
-//    m_program(nullptr),
-//    m_posAttr(0),
-//    m_colAttr(0),
-//    m_matrixUniform(0)
 {
     setFocusPolicy(Qt::StrongFocus);
+    m_axisLength = 1.0f;
 
     QSurfaceFormat format;
     format.setDepthBufferSize(24);
@@ -38,9 +39,9 @@ Scatter3D::Scatter3D(QWidget *parent):
     lp.drawText(0, 0, 500, 100, Qt::AlignCenter, "This js THE Variable ² Total ASS");
     lp.drawText(0, 100, 500, 100, Qt::AlignCenter, "This js THE Variable ² Total COLL");
     lp.drawText(0, 200, 500, 100, Qt::AlignCenter, "This js THE Variable ² Total g,UOCOO");
-//    QLabel *magic = new QLabel();
-//    magic->setPixmap(QPixmap::fromImage(m_axisLabelImage));
-//    magic->show();
+    QLabel *magic = new QLabel();
+    magic->setPixmap(QPixmap::fromImage(m_axisLabelImage));
+    magic->show();
 
     resetRanges();
 }
@@ -90,9 +91,9 @@ void Scatter3D::computeLimits()
         // No values, make this a null box
         m_limits.fill(0);
         return;
-    } else {
-        m_limits = m_entities[0].maxmin();
     }
+
+    m_limits = m_entities[0].maxmin();
     for (int i = 1; i < m_entities.size(); i++) {
         auto el = m_entities[i].maxmin();
         for (int j = 0; j < 3; j++) {
@@ -102,17 +103,26 @@ void Scatter3D::computeLimits()
     }
 }
 
+GLuint uintCheck(int v) {
+    if (v < 0)
+        throw "Error!";
+    return static_cast<GLuint>(v);
+}
+
 void Scatter3D::initializeGL()
 {
     initializeOpenGLFunctions();
     glEnable(GL_DEPTH_TEST);
+//    glEnable(GL_LINE_SMOOTH);
+//    glEnable(GL_BLEND);
+//    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glClearColor(static_cast<float>(m_bgColor.redF()),
                  static_cast<float>(m_bgColor.greenF()),
                  static_cast<float>(m_bgColor.blueF()),
                  0.0f);
 
-    glPointSize(3.0);
-    glLineWidth(3.0);
+    glPointSize(5.0);
+//    glLineWidth(10);
 
     std::vector<float> cubeCoords = {
         -1, -1, -1,
@@ -129,7 +139,23 @@ void Scatter3D::initializeGL()
         2, 3, 6, 7, 5, 4, 1, 0,
     };
 
-//    m_vaos["axis"]
+    m_vaos["axis"] = new QOpenGLVertexArrayObject(this);
+    m_vaos["axis"]->create();
+    m_vaos["axis"]->bind();
+
+    m_vbos["cube"] = new QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
+    m_vbos["cube"]->create();
+    m_vbos["cube"]->bind();
+    m_vbos["cube"]->allocate(cubeCoords.data(), static_cast<int>(sizeof(float) * cubeCoords.size()));
+    m_vbos["cube"]->release();
+
+    m_vbos["cube/indices"] = new QOpenGLBuffer(QOpenGLBuffer::IndexBuffer);
+    m_vbos["cube/indices"]->create();
+    m_vbos["cube/indices"]->bind();
+    m_vbos["cube/indices"]->allocate(cubeCoords.data(), static_cast<int>(sizeof(float) * cubeCoords.size()));
+    m_vbos["cube/indices"]->release();
+
+    m_vaos["axis"]->release();
 
     m_vaos["data"] = new QOpenGLVertexArrayObject(this);
     m_vaos["data"]->create();
@@ -144,16 +170,18 @@ void Scatter3D::initializeGL()
     float axGreen = static_cast<float>(m_axisColor.redF());
     float axBlue = static_cast<float>(m_axisColor.redF());
 
-    float l = 0.5f;
+    float l = m_axisLength;
     std::vector<float> axisVert {
-        -l,  l, -l, axRed, axGreen, axBlue,
         -l, -l, -l, axRed, axGreen, axBlue,
          l, -l, -l, axRed, axGreen, axBlue,
         -l, -l, -l, axRed, axGreen, axBlue,
+        -l,  l, -l, axRed, axGreen, axBlue,
         -l, -l, -l, axRed, axGreen, axBlue,
         -l, -l,  l, axRed, axGreen, axBlue
     };
+
     m_vbos["axis"]->allocate(axisVert.data(), static_cast<int>(sizeof(float) * axisVert.size()));
+    m_vbos["axis"]->release();
 
     m_vbos["points"] = new QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
     m_vbos["points"]->create();
@@ -170,9 +198,10 @@ void Scatter3D::initializeGL()
         "layout (location = 0) in vec3 aPos;\n"
         "layout (location = 1) in vec3 aCol;\n"
         "out vec3 outCol;\n"
+        "out vec2 UV;\n"
         "uniform mat4 transform = mat4(1.0);\n"
         "uniform mat3x3 ranges = mat3x3(0);\n"
-        "uniform mat3x3 limits = mat3x3(0);\n"
+        "uniform mat3x3 limits = mat3x3(-1, 1, 0, -1, 1, 0, -1, 1, 0);\n" // Column-major
         "void main() {\n"
         "    mat3x3 wat = ranges;\n"
         "    if (ranges[0][1] <= ranges[0][0]) {\n"
@@ -197,33 +226,66 @@ void Scatter3D::initializeGL()
     static const char *fragmentShaderSource =
         "#version 430 core\n"
         "in vec3 outCol;\n"
-        "out vec4 FragColor;\n"
+        "out vec4 fragCol;\n"
         "void main() {\n"
-        "   FragColor = vec4(outCol, 1.0f);\n"
+        "   fragCol = vec4(outCol, 1.0f);\n"
+        "   fragCol = mix(fragCol, vec4(0.1f), gl_FragCoord.z);\n"
         "}\n";
 
-    m_programs["pos-col"] = new QOpenGLShaderProgram(this);
-    if (!m_programs["pos-col"]->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShaderSource)) {
+    static const char *textureFragShaderSource =
+        "#version 430 core\n"
+        "in vec2 UV;\n"
+        "out vec3 fragCol;\n"
+        "uniform sampler2D txtSampler;\n"
+        "void main() {\n"
+        "    fragCol = texture(txtSampler, UV).rgb;\n"
+        "}\n";
+
+    m_programs[PROG_POINTS] = new QOpenGLShaderProgram(this);
+    if (!m_programs[PROG_POINTS]->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShaderSource)) {
         std::cout << "Compilation error!" << std::endl;
-        std::cout << m_programs["pos-col"]->log().toStdString() << std::endl;
+        std::cout << m_programs[PROG_POINTS]->log().toStdString() << std::endl;
         exit(0);
     }
-    if (!m_programs["pos-col"]->addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShaderSource)) {
+    if (!m_programs[PROG_POINTS]->addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShaderSource)) {
         std::cout << "Compilation error!" << std::endl;
-        std::cout << m_programs["pos-col"]->log().toStdString() << std::endl;
+        std::cout << m_programs[PROG_POINTS]->log().toStdString() << std::endl;
         exit(0);
     }
-    if (!m_programs["pos-col"]->link()) {
+    if (!m_programs[PROG_POINTS]->link()) {
         std::cout << "Linking error!" << std::endl;
-        std::cout << m_programs["pos-col"]->log().toStdString() << std::endl;
+        std::cout << m_programs[PROG_POINTS]->log().toStdString() << std::endl;
         exit(0);
     }
 
-    m_attribs["pos-col"] = m_programs["pos-col"]->attributeLocation("posAttr");
-    m_attribs["pos-col"] = m_programs["pos-col"]->attributeLocation("colAttr");
-    m_uniforms["pos-col"] = m_programs["pos-col"]->uniformLocation("transform");
-    m_uniforms["ranges"] = m_programs["pos-col"]->uniformLocation("ranges");
-    m_uniforms["limits"] = m_programs["pos-col"]->uniformLocation("limits");
+    m_attribs[PROG_POINTS"/pos"] = uintCheck(m_programs[PROG_POINTS]->attributeLocation("aPos"));
+    m_attribs[PROG_POINTS"/col"] = uintCheck(m_programs[PROG_POINTS]->attributeLocation("aCol"));
+    m_uniforms["pos-col"] = m_programs[PROG_POINTS]->uniformLocation("transform");
+    m_uniforms["ranges"] = m_programs[PROG_POINTS]->uniformLocation("ranges");
+    m_uniforms["limits"] = m_programs[PROG_POINTS]->uniformLocation("limits");
+
+    m_programs[PROG_TEXT] = new QOpenGLShaderProgram(this);
+    if (!m_programs[PROG_TEXT]->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShaderSource)) {
+        std::cout << "Compilation error!" << std::endl;
+        std::cout << m_programs[PROG_TEXT]->log().toStdString() << std::endl;
+        exit(0);
+    }
+    if (!m_programs[PROG_TEXT]->addShaderFromSourceCode(QOpenGLShader::Fragment, textureFragShaderSource)) {
+        std::cout << "Compilation error!" << std::endl;
+        std::cout << m_programs[PROG_TEXT]->log().toStdString() << std::endl;
+        exit(0);
+    }
+    if (!m_programs[PROG_TEXT]->link()) {
+        std::cout << "Linking error!" << std::endl;
+        std::cout << m_programs[PROG_TEXT]->log().toStdString() << std::endl;
+        exit(0);
+    }
+
+    m_attribs[PROG_TEXT"/pos"] = uintCheck(m_programs[PROG_POINTS]->attributeLocation("aPos"));
+    m_attribs[PROG_TEXT"/col"] = uintCheck(m_programs[PROG_POINTS]->attributeLocation("aCol"));
+    m_uniforms["pos-col"] = m_programs[PROG_POINTS]->uniformLocation("transform");
+    m_uniforms["ranges"] = m_programs[PROG_POINTS]->uniformLocation("ranges");
+    m_uniforms["limits"] = m_programs[PROG_POINTS]->uniformLocation("limits");
 
     loadData();
 }
@@ -233,49 +295,70 @@ void Scatter3D::paintGL()
     const GLsizei retinaScale = devicePixelRatio();
     const qreal W = width() * retinaScale;
     const qreal H = height() * retinaScale;
+
+    const float axisRanges[] = { 0.0f, 0.0f, 0.0f,  0.0f, 0.0f, 0.0f,  0.0f, 0.0f, 0.0f};
+    const float axisLimits[] = {-1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f}; // Row-major
+    const QMatrix3x3 axisRangesMtx(axisRanges);
+    const QMatrix3x3 axisLimitsMtx(axisLimits);
+
     glViewport(0, 0, static_cast<GLsizei>(W), static_cast<GLsizei>(H));
 
     glClear(GL_COLOR_BUFFER_BIT);
+    glClearDepth(1);
 
-    // TODO drawing axis labels (why not the full axes as images? it could be possible)s
-    // Bind program that uses textures
-    // Bind axis quads for labels
-    // Draw quads with labels
+    // Program to display axis and data
+    m_programs[PROG_POINTS]->bind();
 
-    m_programs["pos-col"]->bind();
-
-    QMatrix4x4 transform;
-    transform.scale(static_cast<float>(H / W), 1.0f, 1.0f);
-    transform.translate(m_translation.x(), m_translation.y());
-    transform = transform * m_rotation;  // .rotate(m_rotation);// .x(), 0.0, 1.0, 0.0); // FIXME use better rotation see this: http://doc.qt.io/qt-5/qtopengl-cube-example.html
-//    transform.rotate(m_rotation.y(), 1.0, 0.0, 0.0); // FIXME use better rotation see this: http://doc.qt.io/qt-5/qtopengl-cube-example.html
-    m_programs["pos-col"]->setUniformValue(m_uniforms["pos-col"], transform);
-    m_programs["pos-col"]->setUniformValue(m_uniforms["ranges"], m_ranges.transposed());
-    m_programs["pos-col"]->setUniformValue(m_uniforms["limits"], m_limits.transposed());
-
+    // VAO with data and tags
     m_vaos["data"]->bind();
 
-    // Draw the axis lines
-    m_vbos["axis"]->bind();
+    // Set transformation matrix: it will affect axis and data with translation and rotation
+    QMatrix4x4 transform, scale;
+    scale.scale(static_cast<float>(H / W), 1.0f, 1.0f); // Fit inside viewport
+    transform.translate(m_translation.x(), m_translation.y()); // Move objects around
+    transform = transform * m_rotation;
+    transform = scale * transform;
 
-    // Bind vertex values to position and color attributes
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
+    // Draw axis
+    if (true) {
+        m_programs[PROG_POINTS]->setUniformValue(m_uniforms["pos-col"], transform);
+        m_programs[PROG_POINTS]->setUniformValue(m_uniforms["ranges"], axisRangesMtx);
+        m_programs[PROG_POINTS]->setUniformValue(m_uniforms["limits"], axisLimitsMtx);
 
-    // Draw axis as lines
-    glDrawArrays(GL_LINES, 0, 6);
+        // Draw the axis lines
+        m_vbos["axis"]->bind();
+        // Bind vertex values to position and color attributes
+        glVertexAttribPointer(m_attribs[PROG_POINTS"/pos"], 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), nullptr);
+        glEnableVertexAttribArray(m_attribs[PROG_POINTS"/pos"]);
+        glVertexAttribPointer(m_attribs[PROG_POINTS"/col"], 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
+        glEnableVertexAttribArray(m_attribs[PROG_POINTS"/col"]);
+        // Draw axis as lines
+        glDrawArrays(GL_LINES, 0, 6);
+        // Done drawing axes
+        m_vbos["axis"]->release();
+    }
 
-    // Draw the points
-    m_vbos["points"]->bind();
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glDrawArrays(GL_POINTS, 0, m_nVertices);
+    // Draw points
+    if (true) {
+        m_programs[PROG_POINTS]->setUniformValue(m_uniforms["pos-col"], transform);
+        m_programs[PROG_POINTS]->setUniformValue(m_uniforms["ranges"], m_ranges.transposed());
+        m_programs[PROG_POINTS]->setUniformValue(m_uniforms["limits"], m_limits.transposed());
 
-    m_programs["pos-col"]->release();
+        // Draw the points
+        m_vbos["points"]->bind();
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), nullptr);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
+        glEnableVertexAttribArray(1);
+        glDrawArrays(GL_POINTS, 0, m_nVertices);
+        m_vbos["points"]->release();
+    }
+
+    // Done drawing things
+    m_programs[PROG_POINTS]->release();
+
+    m_programs[PROG_TEXT]->bind();
+    m_programs[PROG_TEXT]->release();
 
     GLenum err;
     while ((err = glGetError()) != GL_NO_ERROR) {
@@ -358,8 +441,8 @@ void Scatter3D::mouseMoveEvent(QMouseEvent *e)
     // Rotate
     QMatrix4x4 rx;
     QMatrix4x4 ry;
-    rx.rotate(360 * relDist.x(), 0, 1);
-    ry.rotate(360 * relDist.y(), 1, 0);
+    rx.rotate(-360 * relDist.x(), 0, 1);
+    ry.rotate(-360 * relDist.y(), 1, 0);
     m_rotation = ry * m_rotation * rx;
 
     update();
@@ -367,5 +450,6 @@ void Scatter3D::mouseMoveEvent(QMouseEvent *e)
 
 void Scatter3D::wheelEvent(QWheelEvent *event)
 {
+    Q_UNUSED(event);
 }
 
