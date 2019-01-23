@@ -102,6 +102,9 @@ private:
     QMatrix4x4 m_rotation;
 
     QImage m_axisLabelImage;
+    QImage m_axisImageXY;
+    QImage m_axisImageXZ;
+    QImage m_axisImageYZ;
     int m_nVertices;
 
 //    GLint m_colAttr;

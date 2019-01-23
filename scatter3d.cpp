@@ -7,11 +7,28 @@
 
 #include <QLabel>
 
+// FIXME normalization is broken: what happens if points are all on the same plane?
 
 // Using macros to concatenate strings
 #define PROG_TEXT "texture-quad"
 #define PROG_POINTS "pos-col"
 
+void demoDraw(QImage &img, const QString &vert, const QString &hori) {
+    QPainter lp(&img);
+
+    lp.drawText(20, 20, "0,0");
+    lp.drawText(120, 120, "100,100");
+    lp.drawText(20, 120, "0,100");
+
+    lp.drawText(128, 128, vert);
+    lp.drawText(150, 150, hori);
+}
+
+void showImage(const QImage &img) {
+    QLabel *magic = new QLabel();
+    magic->setPixmap(QPixmap::fromImage(img));
+    magic->show();
+}
 
 Scatter3D::Scatter3D(QWidget *parent):
     QOpenGLWidget(parent),
@@ -29,19 +46,26 @@ Scatter3D::Scatter3D(QWidget *parent):
 
     m_axisColor = QColor(255, 255, 255);
 
+    m_axisImageXY = QImage(512, 512, QImage::Format_ARGB32);
+    m_axisImageXZ = QImage(512, 512, QImage::Format_ARGB32);
+    m_axisImageYZ = QImage(512, 512, QImage::Format_ARGB32);
+
+    m_axisImageXY.fill(Qt::white);
+    m_axisImageXZ.fill(Qt::white);
+    m_axisImageYZ.fill(Qt::white);
+
+    demoDraw(m_axisImageXY, "X", "Y");
+    demoDraw(m_axisImageXZ, "X", "Z");
+    demoDraw(m_axisImageYZ, "Y", "Z");
+
     // Prepare axis texture
-    m_axisLabelImage = QImage(500, 300, QImage::Format_ARGB32);
-    m_axisLabelImage.fill(Qt::transparent);
-    QPainter lp(&m_axisLabelImage);
-//    lp.fillRect(0, 0, 500, 100, Qt::white);
-//    lp.fillRect(0, 100, 500, 100, Qt::gray);
-//    lp.fillRect(0, 200, 500, 100, Qt::white);
-    lp.drawText(0, 0, 500, 100, Qt::AlignCenter, "This js THE Variable ² Total ASS");
-    lp.drawText(0, 100, 500, 100, Qt::AlignCenter, "This js THE Variable ² Total COLL");
-    lp.drawText(0, 200, 500, 100, Qt::AlignCenter, "This js THE Variable ² Total g,UOCOO");
-    QLabel *magic = new QLabel();
-    magic->setPixmap(QPixmap::fromImage(m_axisLabelImage));
-    magic->show();
+    m_axisLabelImage = QImage(1024, 1024, QImage::Format_ARGB32);
+    QPainter p(&m_axisLabelImage);
+    p.drawImage(0, 0, m_axisImageXY);
+    p.drawImage(0, 512, m_axisImageXZ);
+    p.drawImage(512, 0, m_axisImageYZ);
+
+    showImage(m_axisLabelImage);
 
     resetRanges();
 }
@@ -121,22 +145,64 @@ void Scatter3D::initializeGL()
                  static_cast<float>(m_bgColor.blueF()),
                  0.0f);
 
+    // Cull back faces
+    glCullFace(GL_BACK);
+
+
     glPointSize(5.0);
 //    glLineWidth(10);
 
-    std::vector<float> cubeCoords = {
-        -1, -1, -1,
-         1, -1, -1,
-         1,  1, -1,
-        -1,  1, -1,
-        -1, -1,  1,
-         1, -1,  1,
-         1,  1,  1,
-        -1,  1,  1,
-    };
-    std::vector<float> cubeIndices = {
-        6, 5, 2, 1, 3, 0, 7, 4,
-        2, 3, 6, 7, 5, 4, 1, 0,
+    float axRed = static_cast<float>(m_axisColor.redF());
+    float axGreen = static_cast<float>(m_axisColor.redF());
+    float axBlue = static_cast<float>(m_axisColor.redF());
+
+//    std::vector<float> cubeCoords = {
+//        -1, -1, -1,
+//         1, -1, -1,
+//         1,  1, -1,
+//        -1,  1, -1,
+//        -1, -1,  1,
+//         1, -1,  1,
+//         1,  1,  1,
+//        -1,  1,  1,
+//    };
+//    std::vector<float> cubeIndices = {
+//        6, 5, 2, 1, 3, 0, 7, 4,
+//        2, 3, 6, 7, 5, 4, 1, 0,
+//    };
+
+    float l = m_axisLength;
+    std::vector<float> cubeVerts = {
+        // Strip
+        -l, -l, -l, 0.0f, 0.0f, // 0
+        -l, -l, +l, 0.0f, 0.0f, // 0
+        -l, +l, -l, 0.0f, 0.0f, // 0
+        -l, +l, +l, 0.0f, 0.0f, // 0
+
+        -l, +l, -l, 0.0f, 0.0f, // 0
+        -l, +l, +l, 0.0f, 0.0f, // 0
+        +l, +l, -l, 0.0f, 0.0f, // 0
+        +l, +l, +l, 0.0f, 0.0f, // 0
+
+        +l, +l, -l, 0.0f, 0.0f, // 0
+        +l, +l, +l, 0.0f, 0.0f, // 0
+        +l, -l, -l, 0.0f, 0.0f, // 0
+        +l, -l, +l, 0.0f, 0.0f, // 0
+
+        +l, -l, -l, 0.0f, 0.0f, // 0
+        +l, -l, +l, 0.0f, 0.0f, // 0
+        -l, -l, -l, 0.0f, 0.0f, // 0
+        -l, -l, +l, 0.0f, 0.0f, // 0
+
+        +l, +l, -l, 0.0f, 0.0f, // 0
+        +l, -l, -l, 0.0f, 0.0f, // 0
+        -l, +l, -l, 0.0f, 0.0f, // 0
+        -l, -l, -l, 0.0f, 0.0f, // 0
+
+        -l, -l, +l, 0.0f, 0.0f, // 0
+        +l, -l, +l, 0.0f, 0.0f, // 0
+        -l, +l, +l, 0.0f, 0.0f, // 0
+        +l, +l, +l, 0.0f, 0.0f // 0
     };
 
     m_vaos["axis"] = new QOpenGLVertexArrayObject(this);
@@ -146,14 +212,14 @@ void Scatter3D::initializeGL()
     m_vbos["cube"] = new QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
     m_vbos["cube"]->create();
     m_vbos["cube"]->bind();
-    m_vbos["cube"]->allocate(cubeCoords.data(), static_cast<int>(sizeof(float) * cubeCoords.size()));
+    m_vbos["cube"]->allocate(cubeVerts.data(), static_cast<int>(sizeof(float) * cubeVerts.size()));
     m_vbos["cube"]->release();
 
-    m_vbos["cube/indices"] = new QOpenGLBuffer(QOpenGLBuffer::IndexBuffer);
-    m_vbos["cube/indices"]->create();
-    m_vbos["cube/indices"]->bind();
-    m_vbos["cube/indices"]->allocate(cubeCoords.data(), static_cast<int>(sizeof(float) * cubeCoords.size()));
-    m_vbos["cube/indices"]->release();
+//    m_vbos["cube/indices"] = new QOpenGLBuffer(QOpenGLBuffer::IndexBuffer);
+//    m_vbos["cube/indices"]->create();
+//    m_vbos["cube/indices"]->bind();
+//    m_vbos["cube/indices"]->allocate(cubeCoords.data(), static_cast<int>(sizeof(float) * cubeCoords.size()));
+//    m_vbos["cube/indices"]->release();
 
     m_vaos["axis"]->release();
 
@@ -166,11 +232,7 @@ void Scatter3D::initializeGL()
     m_vbos["axis"]->create();
     m_vbos["axis"]->bind();
 
-    float axRed = static_cast<float>(m_axisColor.redF());
-    float axGreen = static_cast<float>(m_axisColor.redF());
-    float axBlue = static_cast<float>(m_axisColor.redF());
-
-    float l = m_axisLength;
+//    float l = m_axisLength;
     std::vector<float> axisVert {
         -l, -l, -l, axRed, axGreen, axBlue,
          l, -l, -l, axRed, axGreen, axBlue,
@@ -193,12 +255,12 @@ void Scatter3D::initializeGL()
     m_textures["axis"]->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
     m_textures["axis"]->setMagnificationFilter(QOpenGLTexture::Linear);
 
+    // Data program
     static const char *vertexShaderSource =
         "#version 430 core\n"
         "layout (location = 0) in vec3 aPos;\n"
         "layout (location = 1) in vec3 aCol;\n"
         "out vec3 outCol;\n"
-        "out vec2 UV;\n"
         "uniform mat4 transform = mat4(1.0);\n"
         "uniform mat3x3 ranges = mat3x3(0);\n"
         "uniform mat3x3 limits = mat3x3(-1, 1, 0, -1, 1, 0, -1, 1, 0);\n" // Column-major
@@ -223,6 +285,7 @@ void Scatter3D::initializeGL()
         "    gl_Position = transform * vec4(pos, 1.0);\n"
         "    outCol = aCol;\n"
         "}\n";
+
     static const char *fragmentShaderSource =
         "#version 430 core\n"
         "in vec3 outCol;\n"
@@ -230,15 +293,6 @@ void Scatter3D::initializeGL()
         "void main() {\n"
         "   fragCol = vec4(outCol, 1.0f);\n"
         "   fragCol = mix(fragCol, vec4(0.1f), gl_FragCoord.z);\n"
-        "}\n";
-
-    static const char *textureFragShaderSource =
-        "#version 430 core\n"
-        "in vec2 UV;\n"
-        "out vec3 fragCol;\n"
-        "uniform sampler2D txtSampler;\n"
-        "void main() {\n"
-        "    fragCol = texture(txtSampler, UV).rgb;\n"
         "}\n";
 
     m_programs[PROG_POINTS] = new QOpenGLShaderProgram(this);
@@ -260,12 +314,54 @@ void Scatter3D::initializeGL()
 
     m_attribs[PROG_POINTS"/pos"] = uintCheck(m_programs[PROG_POINTS]->attributeLocation("aPos"));
     m_attribs[PROG_POINTS"/col"] = uintCheck(m_programs[PROG_POINTS]->attributeLocation("aCol"));
-    m_uniforms["pos-col"] = m_programs[PROG_POINTS]->uniformLocation("transform");
-    m_uniforms["ranges"] = m_programs[PROG_POINTS]->uniformLocation("ranges");
-    m_uniforms["limits"] = m_programs[PROG_POINTS]->uniformLocation("limits");
+    m_uniforms[PROG_POINTS"/transform"] = m_programs[PROG_POINTS]->uniformLocation("transform");
+    m_uniforms[PROG_POINTS"/ranges"] = m_programs[PROG_POINTS]->uniformLocation("ranges");
+    m_uniforms[PROG_POINTS"/limits"] = m_programs[PROG_POINTS]->uniformLocation("limits");
+
+    // Texture programs
+    static const char *textureVertexShaderSource =
+        "#version 430 core\n"
+        "layout (location = 0) in vec3 aPos;\n"
+        "layout (location = 1) in vec2 vertTexCoord;\n"
+        "out vec2 fragTexCoord;\n"
+        "uniform mat4 transform = mat4(1.0);\n"
+        "uniform mat3x3 ranges = mat3x3(0);\n"
+        "uniform mat3x3 limits = mat3x3(-1, 1, 0, -1, 1, 0, -1, 1, 0);\n" // Column-major
+        "void main() {\n"
+        "    mat3x3 wat = ranges;\n"
+        "    if (ranges[0][1] <= ranges[0][0]) {\n"
+        "        wat[0][0] = limits[0][0];\n"
+        "        wat[0][1] = limits[0][1];\n"
+        "    }\n"
+        "    if (ranges[1][1] <= ranges[1][0]) {\n"
+        "        wat[1][0] = limits[1][0];\n"
+        "        wat[1][1] = limits[1][1];\n"
+        "    }\n"
+        "    if (ranges[2][1] <= ranges[2][0]) {\n"
+        "        wat[2][0] = limits[2][0];\n"
+        "        wat[2][1] = limits[2][1];\n"
+        "    }\n"
+        "    vec3 pos = aPos;\n"
+        "    pos.x = (aPos.x - wat[0][0]) / (wat[0][1] - wat[0][0]) - 0.5;\n"
+        "    pos.y = (aPos.y - wat[1][0]) / (wat[1][1] - wat[1][0]) - 0.5;\n"
+        "    pos.z = (aPos.z - wat[2][0]) / (wat[2][1] - wat[2][0]) - 0.5;\n"
+        "    gl_Position = transform * vec4(pos, 1.0);\n"
+        "    fragTexCoord = vertTexCoord;\n"
+        "}\n";
+
+
+    static const char *textureFragShaderSource =
+        "#version 430 core\n"
+        "in vec2 fragTexCoord;\n"
+        "out vec3 fragCol;\n"
+        "uniform sampler2D texSampler;\n"
+        "void main() {\n"
+//        "    fragCol = mix(max(texture(texSampler, fragTexCoord).rgb, vec3(0.2f, 0.1f, 0.1f)), vec3(0.1f), gl_FragCoord.z);\n"
+        "    fragCol = texture(texSampler, fragTexCoord).rgb;\n"
+        "}\n";
 
     m_programs[PROG_TEXT] = new QOpenGLShaderProgram(this);
-    if (!m_programs[PROG_TEXT]->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShaderSource)) {
+    if (!m_programs[PROG_TEXT]->addShaderFromSourceCode(QOpenGLShader::Vertex, textureVertexShaderSource)) {
         std::cout << "Compilation error!" << std::endl;
         std::cout << m_programs[PROG_TEXT]->log().toStdString() << std::endl;
         exit(0);
@@ -281,11 +377,12 @@ void Scatter3D::initializeGL()
         exit(0);
     }
 
-    m_attribs[PROG_TEXT"/pos"] = uintCheck(m_programs[PROG_POINTS]->attributeLocation("aPos"));
-    m_attribs[PROG_TEXT"/col"] = uintCheck(m_programs[PROG_POINTS]->attributeLocation("aCol"));
-    m_uniforms["pos-col"] = m_programs[PROG_POINTS]->uniformLocation("transform");
-    m_uniforms["ranges"] = m_programs[PROG_POINTS]->uniformLocation("ranges");
-    m_uniforms["limits"] = m_programs[PROG_POINTS]->uniformLocation("limits");
+    m_attribs[PROG_TEXT"/pos"] = uintCheck(m_programs[PROG_TEXT]->attributeLocation("aPos"));
+    m_attribs[PROG_TEXT"/txt"] = uintCheck(m_programs[PROG_TEXT]->attributeLocation("vertTexCoord"));
+    m_uniforms[PROG_TEXT"/transform"] = m_programs[PROG_TEXT]->uniformLocation("transform");
+    m_uniforms[PROG_TEXT"/ranges"] = m_programs[PROG_TEXT]->uniformLocation("ranges");
+    m_uniforms[PROG_TEXT"/limits"] = m_programs[PROG_TEXT]->uniformLocation("limits");
+
 
     loadData();
 }
@@ -306,12 +403,6 @@ void Scatter3D::paintGL()
     glClear(GL_COLOR_BUFFER_BIT);
     glClearDepth(1);
 
-    // Program to display axis and data
-    m_programs[PROG_POINTS]->bind();
-
-    // VAO with data and tags
-    m_vaos["data"]->bind();
-
     // Set transformation matrix: it will affect axis and data with translation and rotation
     QMatrix4x4 transform, scale;
     scale.scale(static_cast<float>(H / W), 1.0f, 1.0f); // Fit inside viewport
@@ -319,11 +410,54 @@ void Scatter3D::paintGL()
     transform = transform * m_rotation;
     transform = scale * transform;
 
+    // Draw axis cube
+    if (true) {
+        // Cull faces to show only back faces
+        glEnable(GL_CULL_FACE);
+
+        m_programs[PROG_TEXT]->bind(); // TODO use PROG_TEXT later
+
+        m_programs[PROG_TEXT]->setUniformValue(m_uniforms[PROG_TEXT"/transform"], transform);
+        m_programs[PROG_TEXT]->setUniformValue(m_uniforms[PROG_TEXT"/ranges"], axisRangesMtx);
+        m_programs[PROG_TEXT]->setUniformValue(m_uniforms[PROG_TEXT"/limits"], axisLimitsMtx);
+
+        // Use texture unit 0 which contains cube.png
+        glActiveTexture(GL_TEXTURE0);
+        m_textures["axis"]->bind();
+        m_programs[PROG_TEXT]->setUniformValue("texSampler", 0);
+
+        m_vaos["axis"]->bind();
+        m_vbos["cube"]->bind();
+//        m_vbos["cube/indices"]->bind();
+
+        // Bind vertex values to position and color attributes
+        glVertexAttribPointer(m_attribs[PROG_TEXT"/pos"], 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), nullptr);
+        glEnableVertexAttribArray(m_attribs[PROG_TEXT"/pos"]);
+        glVertexAttribPointer(m_attribs[PROG_TEXT"/txt"], 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
+        glEnableVertexAttribArray(m_attribs[PROG_TEXT"/txt"]);
+
+        // Draw cube as lines
+        for (int i = 0; i < 6; i++)
+            glDrawArrays(GL_TRIANGLE_STRIP, i*4, 4);
+
+        // Done drawing axes
+        m_vaos["axis"]->release();
+        m_programs[PROG_TEXT]->release(); // TODO use PROG_TEXT later
+
+        glDisable(GL_CULL_FACE);
+    }
+
+    // Program to display axis and data
+    m_programs[PROG_POINTS]->bind();
+
+    // VAO with data and tags
+    m_vaos["data"]->bind();
+
     // Draw axis
     if (true) {
-        m_programs[PROG_POINTS]->setUniformValue(m_uniforms["pos-col"], transform);
-        m_programs[PROG_POINTS]->setUniformValue(m_uniforms["ranges"], axisRangesMtx);
-        m_programs[PROG_POINTS]->setUniformValue(m_uniforms["limits"], axisLimitsMtx);
+        m_programs[PROG_POINTS]->setUniformValue(m_uniforms[PROG_POINTS"/transform"], transform);
+        m_programs[PROG_POINTS]->setUniformValue(m_uniforms[PROG_POINTS"/ranges"], axisRangesMtx);
+        m_programs[PROG_POINTS]->setUniformValue(m_uniforms[PROG_POINTS"/limits"], axisLimitsMtx);
 
         // Draw the axis lines
         m_vbos["axis"]->bind();
@@ -340,9 +474,9 @@ void Scatter3D::paintGL()
 
     // Draw points
     if (true) {
-        m_programs[PROG_POINTS]->setUniformValue(m_uniforms["pos-col"], transform);
-        m_programs[PROG_POINTS]->setUniformValue(m_uniforms["ranges"], m_ranges.transposed());
-        m_programs[PROG_POINTS]->setUniformValue(m_uniforms["limits"], m_limits.transposed());
+        m_programs[PROG_POINTS]->setUniformValue(m_uniforms[PROG_POINTS"/transform"], transform);
+        m_programs[PROG_POINTS]->setUniformValue(m_uniforms[PROG_POINTS"/ranges"], m_ranges.transposed());
+        m_programs[PROG_POINTS]->setUniformValue(m_uniforms[PROG_POINTS"/limits"], m_limits.transposed());
 
         // Draw the points
         m_vbos["points"]->bind();
